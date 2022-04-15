@@ -11,7 +11,7 @@ handlers:
     
   file_handler:
     class: logging.handlers.RotatingFileHandler
-    level: INFO
+    level: DEBUG
     formatter: simple
     filename: /tmp/sensadoCargadores.log
     maxBytes: 104857600 # 100MB
