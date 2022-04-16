@@ -208,7 +208,7 @@ while 1:
     except socket.timeout as e:             # Captura una excepcion relacionada con el puerto serie 
         logger.error("Fallo en la comunicacion con el servidor MQTT. Intentando reconectar...")
         printExceptionInfo(e)
-        time.sleep(5)
+        time.sleep(20)
         client = ''                         # Así forzamos que en el siguiente ciclo vuelva a intentar la comunicación.
     
     except Exception as e:                  # Captura cualquier excepcion no capturada y permitimos que el bucle continue. 
