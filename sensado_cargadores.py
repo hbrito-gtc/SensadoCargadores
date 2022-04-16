@@ -63,8 +63,15 @@ def printExceptionInfo(e):
     logger.error("Exception message : %s" %ex_value)
     logger.debug("Stack trace : %s" %stack_trace)
 
+last_received_msg = ''
 
-with open('logging_config.yml', 'r') as f:
+def on_message(client, userdata, message):
+    global last_received_msg
+    last_received_msg = str(message.payload.decode("utf-8"))
+
+
+#with open('logging_config.yml', 'r') as f:   # Test
+with open('/home/pi/SensadoCargadores/logging_config.yml', 'r') as f: # Production
     config = yaml.safe_load(f.read())
     logging.config.dictConfig(config)
 
@@ -77,16 +84,12 @@ client = ''
 
 while 1:
     try:
-        # Incializamos conexiones
+        # Incializamos conexion serie
         if not ser:
+            logger.debug("Connecting to Serial")
             ser = serial.Serial('/dev/ttyAMA0', 38400)  # Produccion
             #ser = serial.Serial('ttyclient', 38400)     # Test
 
-        if not client:
-            client = mqtt.Client("P1")
-            client.username_pw_set(MQTT_USER, MQTT_PASS)
-            client.connect(MQTT_SERV)
-  
         # Reseteamos los contadores a las 00:00
         now = datetime.now()
         if (now.hour == 0 and now.minute == 0):
@@ -150,6 +153,25 @@ while 1:
         #logger.debug("Instant Power3: %s (W)" % Pest_C3)
         #logger.debug("Accum Energy3: %.2f (Wh)" % E_C3)
 	
+	    # Incializamos conexion MQTT, lo dejamos espaciado de la conexion serie para darle tiempo a que reciba la suscripcion
+        # con la que comprobamos que el link esta funcionando.
+        if client and not last_received_msg:
+            logger.error('No se ha recivido msg de suscripcion. Fallo en la comunicacion MQTT')
+            client.disconnect()
+            client = ''  # Forzamos a reiniciar comunicacion
+        else:
+            last_received_msg = ''
+            
+        if not client:   # Si no hay mensaje, es que no funciona communicación, puesta estamos suscritos. 
+            logger.debug("Connecting to MQTT server")
+            client = mqtt.Client("P1")
+            client.on_message=on_message  # Bind function to callback
+            client.username_pw_set(MQTT_USER, MQTT_PASS)
+            client.connect(MQTT_SERV)
+            client.loop_start()        
+            client.subscribe(MQTT_TOPIC)
+            logger.info('Realizando suscripcion a '+MQTT_TOPIC)
+	
         msg1 = {}
         if ((time.time()-last_time) > 30):
             msg1["E_C1"] = round(E_C1/1000.0, 2)
@@ -167,6 +189,8 @@ while 1:
             if (CHANNELS[i] != "NO_USADO"):
                 msg2[CHANNELS[i]] = float(Z[i])
         client.publish(MQTT_TOPIC, json.dumps(msg2)) 
+        time.sleep(0.5)  # IMP: Es importante este tiempo al menos porque si hubieran 2 mensaje seguidos 
+        # uno de ellos no se publicaría en el broker, y fallaria la comprobacion mediante la suscripcion.
 
     except KeyboardInterrupt as e:
 	    printExceptionInfo(e)
